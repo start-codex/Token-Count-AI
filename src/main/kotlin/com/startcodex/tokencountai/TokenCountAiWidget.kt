@@ -18,6 +18,7 @@ import com.intellij.openapi.ui.popup.ListPopup
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.impl.status.EditorBasedStatusBarPopup
 import com.intellij.util.messages.MessageBusConnection
+import java.util.concurrent.Future
 
 class TokenCountAIWidget(project: Project) :
     EditorBasedStatusBarPopup(project, false),
@@ -27,6 +28,11 @@ class TokenCountAIWidget(project: Project) :
     private var selectionActive: Boolean = false
     private var connection: MessageBusConnection? = null
     private var currentEditor: Editor? = null
+
+    // Control de tareas asíncronas
+    @Volatile private var calculationInProgress: Boolean = false
+    private var currentCalculationTask: Future<*>? = null
+    private val CALCULATION_DEBOUNCE_MS: Long = 300L // Reducido para mejor responsividad
 
     init {
         connection = project.messageBus.connect(this)
@@ -47,11 +53,17 @@ class TokenCountAIWidget(project: Project) :
     override fun ID(): String = "TokenCountAIWidget"
 
     override fun getWidgetState(file: VirtualFile?): WidgetState {
-        val text = "$tokenCount tokens"
-        val tooltip = if (selectionActive) {
-            "$tokenCount tokens (selection)"
+        val text = if (calculationInProgress) {
+            "Calculating..."
         } else {
-            "$tokenCount tokens (full file)"
+            "$tokenCount tokens"
+        }
+        val tooltip = if (calculationInProgress) {
+            "Calculating token count..."
+        } else if (selectionActive) {
+            "selection: $tokenCount tokens"
+        } else {
+            "$tokenCount tokens"
         }
         return WidgetState(text, tooltip, true)
     }
@@ -83,12 +95,16 @@ class TokenCountAIWidget(project: Project) :
             val selectedEditor = fileEditorManager.selectedTextEditor
 
             if (selectedEditor != currentEditor) {
+                // Cancelar cálculo anterior si hay cambio de editor
+                cancelCurrentCalculation()
+
                 currentEditor = selectedEditor
                 selectedEditor?.let { editor ->
                     updateTokenCount(editor)
                 } ?: run {
                     tokenCount = 0
                     selectionActive = false
+                    calculationInProgress = false
                     update()
                 }
             }
@@ -120,6 +136,15 @@ class TokenCountAIWidget(project: Project) :
     }
 
     /**
+     * Cancela el cálculo actual si existe
+     */
+    private fun cancelCurrentCalculation() {
+        currentCalculationTask?.cancel(true)
+        currentCalculationTask = null
+        calculationInProgress = false
+    }
+
+    /**
      * Actualiza el conteo de tokens basado en la selección actual o el documento completo
      * @param editor El editor activo del cual obtener el texto
      */
@@ -136,18 +161,65 @@ class TokenCountAIWidget(project: Project) :
                 editor.document.text
             }
 
-            // Calcular tokens
-            tokenCount = TokenCount.calculateTokens(text)
+            // Cancelar cálculo anterior
+            cancelCurrentCalculation()
 
-            // Actualizar el widget en el hilo de la UI
+            // Para textos pequeños, calcular inmediatamente
+            if (text.length < 3_000) {
+                tokenCount = TokenCount.calculateTokens(text)
+                ApplicationManager.getApplication().invokeLater {
+                    update()
+                }
+                return
+            }
+
+            // Para textos grandes, usar debouncing y cálculo asíncrono
+            calculationInProgress = true
+
+            // Actualizar UI inmediatamente para mostrar "Calculating..."
             ApplicationManager.getApplication().invokeLater {
                 update()
+            }
+
+            // Ejecutar cálculo con debounce
+            currentCalculationTask = ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    // Debounce: esperar un poco para evitar cálculos excesivos
+                    Thread.sleep(CALCULATION_DEBOUNCE_MS)
+
+                    // Verificar si la tarea fue cancelada durante el sleep
+                    if (currentCalculationTask?.isCancelled == true) {
+                        return@executeOnPooledThread
+                    }
+
+                    // Calcular tokens
+                    val calculatedTokens = TokenCount.calculateTokens(text)
+
+                    // Actualizar en el hilo de UI - CONDICIÓN CORREGIDA
+                    ApplicationManager.getApplication().invokeLater {
+                        // Solo actualizar si esta tarea sigue siendo la actual
+                        if (calculationInProgress && currentCalculationTask?.isCancelled != true) {
+                            tokenCount = calculatedTokens
+                            calculationInProgress = false
+                            update()
+                        }
+                    }
+                } catch (e: InterruptedException) {
+                    // Tarea interrumpida, no hacer nada
+                } catch (e: Exception) {
+                    // En caso de error, usar el último valor válido y resetear estado
+                    ApplicationManager.getApplication().invokeLater {
+                        calculationInProgress = false
+                        update()
+                    }
+                }
             }
 
         } catch (e: Exception) {
             // En caso de error, resetear el contador
             tokenCount = 0
             selectionActive = false
+            calculationInProgress = false
 
             ApplicationManager.getApplication().invokeLater {
                 update()
@@ -156,6 +228,7 @@ class TokenCountAIWidget(project: Project) :
     }
 
     override fun dispose() {
+        cancelCurrentCalculation()
         connection?.disconnect()
         currentEditor = null
         super.dispose()
