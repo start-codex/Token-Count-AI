@@ -1,0 +1,44 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>com.startcodex.TokenCountAI</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
+    <name>Token Count AI</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor url="https://startcodex.com/plugins">Start Codex</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
+    <description><![CDATA[
+    Contador de tokens para archivos abiertos en IntelliJ IDEA.<br>
+        - Cuenta tokens de todo el documento o de la selección.<br>
+        - Compatible con IntelliJ Platform.<br>
+  ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensions defaultExtensionNs="com.intellij">
+        <statusBarWidgetFactory
+                id="TokenCountAIWidget"
+                order="after editor.position"
+                implementation="com.startcodex.tokencountai.TokenCountAIStatusWidgetFactory"/>
+    </extensions>
+
+    <actions>
+        <action
+                id="TokenCountAI"
+                class="com.startcodex.tokencountai.TokenCountAiAction"
+                text="Tokens Count"
+                description="Cuenta los tokens del archivo o de la selección actual"
+        >
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
