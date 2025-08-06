@@ -13,9 +13,9 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    Contador de tokens para archivos abiertos en IntelliJ IDEA.<br>
-        - Cuenta tokens de todo el documento o de la selección.<br>
-        - Compatible con IntelliJ Platform.<br>
+    Token counter for open files in IntelliJ IDEA.<br>
+        - Counts tokens in the entire document or the selected portion.<br>
+        - Compatible with IntelliJ Platform.<br>
   ]]></description>
 
     <!-- Product and plugin compatibility requirements.
@@ -36,7 +36,7 @@
                 id="TokenCountAI"
                 class="com.startcodex.tokencountai.TokenCountAiAction"
                 text="Tokens Count"
-                description="Cuenta los tokens del archivo o de la selección actual"
+                description="Count the tokens in the file or the current selection."
         >
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
